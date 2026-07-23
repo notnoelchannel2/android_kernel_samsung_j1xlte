@@ -899,7 +899,8 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 
 	skb_orphan(skb);
 	skb->sk = sk;
-	skb->destructor = tcp_wfree;
+	skb->destructor = (sysctl_tcp_limit_output_bytes > 0) ?
+			  tcp_wfree : sock_wfree;
 	atomic_add(skb->truesize, &sk->sk_wmem_alloc);
 
 	/* Build TCP header and checksum it. */
@@ -1879,9 +1880,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		 *  - faster recovery
 		 *  - high rates
 		 */
-		limit = max(skb->truesize, sk->sk_pacing_rate >> 10);
-
-		if (atomic_read(&sk->sk_wmem_alloc) > limit) {
+		if (atomic_read(&sk->sk_wmem_alloc) >= sysctl_tcp_limit_output_bytes) {
 			set_bit(TSQ_THROTTLED, &tp->tsq_flags);
 			/* It is possible TX completion already happened
 			 * before we set TSQ_THROTTLED, so we must
